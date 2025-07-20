@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Enviar Fotos - PhotoCap{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card border-0 shadow">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-upload"></i> Enviar Fotos
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    {% if events %}
+                        <form method="POST" enctype="multipart/form-data">
+                            <div class="mb-4">
+                                <label for="event_id" class="form-label">Selecione o Evento *</label>
+                                <select class="form-select" id="event_id" name="event_id" required>
+                                    <option value="">Escolha um evento...</option>
+                                    {% for event in events %}
+                                    <option value="{{ event.id }}">{{ event.name }} - {{ event.date.strftime('%d/%m/%Y') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label for="photos" class="form-label">Selecione as Fotos *</label>
+                                <input type="file" class="form-control" id="photos" name="photos" 
+                                       multiple accept="image/*" required>
+                                <div class="form-text">
+                                    Formatos aceitos: JPG, PNG, GIF. Máximo 16MB por arquivo.
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Processamento Automático:</strong> 
+                                    As fotos serão processadas automaticamente para detecção de faces e números de peito.
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-md-2">
+                                    <i class="fas fa-times"></i> Cancelar
+                                </a>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-upload"></i> Enviar Fotos
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                            <h5>Nenhum evento criado</h5>
+                            <p class="text-muted">Você precisa criar um evento antes de enviar fotos.</p>
+                            <a href="{{ url_for('create_event') }}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Criar Evento
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

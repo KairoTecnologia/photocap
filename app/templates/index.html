@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}PhotoCap - Encontre suas fotos de eventos{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">
+                    Participou de um evento?<br>
+                    <span class="text-warning">Busque aqui suas fotos!</span>
+                </h1>
+                <p class="lead mb-4">
+                    Encontre suas fotos de eventos esportivos, festas, casamentos e muito mais. 
+                    Reconhecimento facial e busca por número de peito disponível.
+                </p>
+                
+                <!-- Search Form -->
+                <form action="{{ url_for('search') }}" method="GET" class="search-box">
+                    <div class="input-group">
+                        <input type="text" name="event_name" class="form-control search-input" 
+                               placeholder="Digite aqui o nome do evento..." required>
+                        <button class="btn btn-warning" type="submit">
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="col-lg-6 text-center">
+                <img src="https://via.placeholder.com/500x400/ff6b35/ffffff?text=PhotoCap" 
+                     alt="PhotoCap" class="img-fluid rounded">
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="py-5 bg-light">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-12">
+                <h2 class="fw-bold">Como encontrar suas fotos</h2>
+                <p class="lead text-muted">Múltiplas formas de buscar suas fotos favoritas</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body text-center p-4">
+                        <div class="bg-primary bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                            <i class="fas fa-search fa-2x text-primary"></i>
+                        </div>
+                        <h5 class="card-title">Busca por Evento</h5>
+                        <p class="card-text">Digite o nome do evento e encontre todas as fotos disponíveis.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body text-center p-4">
+                        <div class="bg-success bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                            <i class="fas fa-user fa-2x text-success"></i>
+                        </div>
+                        <h5 class="card-title">Reconhecimento Facial</h5>
+                        <p class="card-text">Envie uma foto sua e encontre todas as fotos onde você aparece.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body text-center p-4">
+                        <div class="bg-warning bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                            <i class="fas fa-hashtag fa-2x text-warning"></i>
+                        </div>
+                        <h5 class="card-title">Busca por Número</h5>
+                        <p class="card-text">Digite seu número de peito e encontre suas fotos do evento.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Categories Section -->
+<section class="py-5">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-12">
+                <h2 class="fw-bold">Eventos por categoria</h2>
+                <p class="lead text-muted">Encontre fotos dos mais diversos tipos de eventos</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/ff6b35/ffffff?text=Corrida" 
+                             class="card-img-top" alt="Corrida">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Corrida</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/3498db/ffffff?text=Ciclismo" 
+                             class="card-img-top" alt="Ciclismo">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Ciclismo</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/e74c3c/ffffff?text=Futebol" 
+                             class="card-img-top" alt="Futebol">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Futebol</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/9b59b6/ffffff?text=Casamento" 
+                             class="card-img-top" alt="Casamento">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Casamento</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/f39c12/ffffff?text=Festa" 
+                             class="card-img-top" alt="Festa">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Festa</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-6 col-md-4 col-lg-2">
+                <div class="category-card">
+                    <div class="card border-0 h-100">
+                        <img src="https://via.placeholder.com/300x200/1abc9c/ffffff?text=Outros" 
+                             class="card-img-top" alt="Outros">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Outros</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Recent Events Section -->
+{% if events %}
+<section class="py-5 bg-light">
+    <div class="container">
+        <div class="row text-center mb-5">
+            <div class="col-12">
+                <h2 class="fw-bold">Eventos recentes</h2>
+                <p class="lead text-muted">Confira os eventos mais recentes com fotos disponíveis</p>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            {% for event in events %}
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 border-0 shadow-sm">
+                    <img src="https://via.placeholder.com/400x250/ff6b35/ffffff?text={{ event.name }}" 
+                         class="card-img-top" alt="{{ event.name }}">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ event.name }}</h5>
+                        <p class="card-text text-muted">
+                            <i class="fas fa-calendar"></i> {{ event.date.strftime('%d/%m/%Y') }}
+                            {% if event.location %}
+                            <br><i class="fas fa-map-marker-alt"></i> {{ event.location }}
+                            {% endif %}
+                        </p>
+                        <a href="{{ url_for('event_detail', event_id=event.id) }}" class="btn btn-primary">
+                            Ver Fotos
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<!-- Call to Action -->
+<section class="py-5">
+    <div class="container">
+        <div class="row justify-content-center text-center">
+            <div class="col-lg-8">
+                <h2 class="fw-bold mb-4">É fotógrafo?</h2>
+                <p class="lead mb-4">
+                    Cadastre-se e comece a vender suas fotos. Nossa plataforma oferece 
+                    reconhecimento facial e de números automaticamente.
+                </p>
+                <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-camera"></i> Cadastrar como Fotógrafo
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 
