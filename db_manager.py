@@ -61,7 +61,7 @@ class DatabaseManager:
         return pwd_hash == stored_hash
     
     # Métodos para usuários
-    def create_user(self, username: str, password: str, email: str) -> Optional[int]:
+    def create_user(self, username: str, password: str, email: str, user_type: str = 'customer', full_name: str = None, cpf: str = None, phone: str = None) -> Optional[int]:
         """Cria um novo usuário no banco de dados"""
         try:
             with self.get_connection() as conn:
@@ -78,13 +78,13 @@ class DatabaseManager:
                 
                 # Insere o usuário
                 cursor.execute("""
-                    INSERT INTO Users (Username, PasswordHash, PasswordSalt, Email)
-                    VALUES (?, ?, ?, ?)
-                """, (username, password_hash, password_salt, email))
+                    INSERT INTO Users (Username, PasswordHash, PasswordSalt, Email, UserType, FullName, CPF, Phone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (username, password_hash, password_salt, email, user_type, full_name, cpf, phone))
                 
                 conn.commit()
                 user_id = cursor.execute("SELECT @@IDENTITY").fetchone()[0]
-                print(f"✅ Usuário '{username}' criado com sucesso (ID: {user_id})")
+                print(f"✅ Usuário '{username}' criado com sucesso (ID: {user_id}, Tipo: {user_type})")
                 return user_id
                 
         except Exception as e:
@@ -132,7 +132,7 @@ class DatabaseManager:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
-                    SELECT UserId, Username, PasswordHash, PasswordSalt, Email
+                    SELECT UserId, Username, PasswordHash, PasswordSalt, Email, UserType, FullName, CPF, Phone
                     FROM Users WHERE Email = ?
                 """, (email,))
                 
@@ -141,15 +141,19 @@ class DatabaseManager:
                     print(f"❌ E-mail '{email}' não encontrado")
                     return None
                 
-                user_id, username, password_hash, password_salt, email = user_data
+                user_id, username, password_hash, password_salt, email, user_type, full_name, cpf, phone = user_data
                 
                 # Verifica a senha
                 if self.verify_password(password_hash, password_salt, password):
-                    print(f"✅ Usuário '{username}' autenticado com sucesso")
+                    print(f"✅ Usuário '{username}' autenticado com sucesso (Tipo: {user_type})")
                     return {
                         'UserId': user_id,
                         'Username': username,
-                        'Email': email
+                        'Email': email,
+                        'UserType': user_type,
+                        'FullName': full_name,
+                        'CPF': cpf,
+                        'Phone': phone
                     }
                 else:
                     print(f"❌ Senha incorreta para e-mail '{email}'")
@@ -382,6 +386,78 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ Erro ao buscar foto: {e}")
             return None
+    
+    # Métodos de compatibilidade com o app_simple_fixed.py
+    def get_users(self) -> List[Dict[str, Any]]:
+        """Retorna todos os usuários (compatibilidade)"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT UserId, Username, Email, UserType, FullName, CPF, Phone, CreatedDate
+                    FROM Users
+                    ORDER BY CreatedDate DESC
+                """)
+                
+                users = []
+                for row in cursor.fetchall():
+                    users.append({
+                        'UserId': row[0],
+                        'Username': row[1],
+                        'Email': row[2],
+                        'UserType': row[3] if row[3] else 'customer',
+                        'FullName': row[4],
+                        'CPF': row[5],
+                        'Phone': row[6],
+                        'CreatedDate': row[7].strftime('%Y-%m-%d %H:%M:%S') if row[7] else None
+                    })
+                
+                return users
+                
+        except Exception as e:
+            print(f"❌ Erro ao buscar usuários: {e}")
+            return []
+    
+    def get_events(self) -> List[Dict[str, Any]]:
+        """Retorna todos os eventos (compatibilidade)"""
+        return self.get_all_events()
+    
+    def get_photos(self) -> List[Dict[str, Any]]:
+        """Retorna todas as fotos (compatibilidade)"""
+        return self.get_all_photos()
+    
+    def get_photo_analyses(self) -> List[Dict[str, Any]]:
+        """Retorna análises de fotos (compatibilidade)"""
+        # Por enquanto retorna lista vazia, pode ser implementado depois
+        return []
+    
+    def add_user(self, user_data: Dict[str, Any]) -> Optional[int]:
+        """Adiciona um usuário (compatibilidade)"""
+        return self.create_user(
+            user_data.get('username', ''),
+            user_data.get('password', ''),
+            user_data.get('email', ''),
+            user_data.get('user_type', 'customer'),
+            user_data.get('full_name'),
+            user_data.get('cpf'),
+            user_data.get('phone')
+        )
+    
+    def add_event(self, event_data: Dict[str, Any]) -> Optional[int]:
+        """Adiciona um evento (compatibilidade)"""
+        return self.create_event(
+            event_data.get('name', ''),
+            event_data.get('date', '')
+        )
+    
+    def add_photo(self, photo_data: Dict[str, Any]) -> Optional[int]:
+        """Adiciona uma foto (compatibilidade)"""
+        return self.save_photo(
+            photo_data.get('event_id', 0),
+            photo_data.get('filename', ''),
+            photo_data.get('image_data')
+        )
 
 # Exemplo de uso
 if __name__ == "__main__":

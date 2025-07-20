@@ -3,18 +3,26 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 
-# Importa o gerenciador de dados
+# Importa o gerenciador de dados SQL Server
 try:
-    from data_manager import data_manager
-    print("✅ Gerenciador de dados carregado")
+    from db_manager import DatabaseManager
+    data_manager = DatabaseManager()
+    print("✅ Gerenciador de dados SQL Server carregado")
 except ImportError as e:
-    print(f"⚠️ Gerenciador de dados não disponível: {e}")
+    print(f"⚠️ Gerenciador de dados SQL Server não disponível: {e}")
     data_manager = None
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'sua_chave_secreta_aqui'
+app.config['SECRET_KEY'] = 'sua_chave_secreta_aqui_muito_segura_123456789'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+
+# Configurações adicionais para sessão
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hora
+app.config['SESSION_COOKIE_SECURE'] = False  # False para desenvolvimento
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Extensões permitidas
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
@@ -84,8 +92,16 @@ def get_base_html(title, content, messages=None):
                     <ul class="navbar-nav">
                         {f'''
                         <li class="nav-item">
-                            <a class="nav-link" href="/dashboard">Dashboard</a>
+                            <a class="nav-link" href="/area_fotografo">Área do Fotógrafo</a>
                         </li>
+                        {f'''
+                        <li class="nav-item">
+                            <a class="nav-link" href="/create_event">Criar Evento</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/upload_photos">Enviar Fotos</a>
+                        </li>
+                        ''' if session.get('user_type') == 'photographer' else ''}
                         <li class="nav-item">
                             <a class="nav-link" href="/logout">Sair</a>
                         </li>
@@ -108,6 +124,7 @@ def get_base_html(title, content, messages=None):
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     </body>
     </html>
     '''
@@ -117,7 +134,7 @@ def index():
     """Página inicial"""
     if data_manager:
         events_data = data_manager.get_events()
-        recent_events = list(events_data.values())[-6:] if events_data else []
+        recent_events = events_data[-6:] if events_data else []
     else:
         recent_events = []
     
@@ -127,12 +144,12 @@ def index():
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title">{event['name']}</h5>
+                    <h5 class="card-title">{event['Name']}</h5>
                     <p class="card-text">
-                        <i class="fas fa-calendar"></i> {format_date(event['date'])}<br>
-                        <i class="fas fa-map-marker-alt"></i> {event.get('location', 'Local não informado')}
+                        <i class="fas fa-calendar"></i> {format_date(event['Date'])}<br>
+                        <i class="fas fa-map-marker-alt"></i> Local não informado
                     </p>
-                    <a href="/event/{event['id']}" class="btn btn-primary">Ver Fotos</a>
+                    <a href="/event/{event['EventId']}" class="btn btn-primary">Ver Fotos</a>
                 </div>
             </div>
         </div>
@@ -186,21 +203,24 @@ def login():
         print(f"🔐 Tentativa de login: {email}")
         
         if data_manager:
-            users_data = data_manager.get_users()
-            print(f"📊 Total de usuários: {len(users_data)}")
-            
-            user = None
-            for u in users_data.values():
-                print(f"🔍 Verificando usuário: {u['email']} - {u['password']}")
-                if u['email'] == email and u['password'] == password:
-                    user = u
-                    break
+            # Usa autenticação por email com hash e salt
+            user = data_manager.authenticate_user_by_email(email, password)
             
             if user:
-                session['user_id'] = user['id']
+                # Torna a sessão permanente
+                session.permanent = True
+                session['user_id'] = user['UserId']
+                session['username'] = user['Username']
+                session['email'] = user['Email']
+                session['user_type'] = user['UserType']
+                
+                print(f"✅ Sessão definida - user_id: {session['user_id']}")
+                print(f"✅ Sessão completa: {session}")
+                print(f"✅ Sessão permanente: {session.permanent}")
+                print(f"✅ Tipo de usuário: {user['UserType']}")
                 messages.append('Login realizado com sucesso!')
-                print(f"✅ Login bem-sucedido para: {user['username']}")
-                return redirect(url_for('dashboard'))
+                print(f"✅ Login bem-sucedido para: {user['Username']}")
+                return redirect(url_for('area_fotografo'))
             else:
                 messages.append('Email ou senha inválidos')
                 print("❌ Login falhou - credenciais inválidas")
@@ -242,7 +262,10 @@ def login():
                     
                     <div class="text-center">
                         <p class="mb-0">Não tem uma conta?</p>
-                        <a href="/register" class="btn btn-outline-primary">Criar Conta</a>
+                        <div class="d-flex gap-2 justify-content-center">
+                            <a href="/register" class="btn btn-outline-primary">Criar Conta</a>
+                            <a href="/register/photographer" class="btn btn-outline-success">Sou Fotógrafo</a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -252,43 +275,59 @@ def login():
     
     return get_base_html("Login - PhotoCap", content, messages)
 
+def clean_cpf(cpf):
+    """Remove pontos e hífens do CPF"""
+    if not cpf:
+        return None
+    return cpf.replace('.', '').replace('-', '').replace('/', '')
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    """Página de registro"""
+    """Página de registro única"""
     messages = []
     
     if request.method == 'POST':
-        username = request.form['username']
+        # Coleta todos os dados do formulário
+        full_name = request.form['full_name']
+        cpf = request.form.get('cpf', '')
+        phone = request.form['phone']
         email = request.form['email']
         password = request.form['password']
-        user_type = request.form['user_type']
+        password_confirm = request.form['password_confirm']
+        user_type = 'customer'  # Tipo padrão para novos usuários
+        terms_accepted = request.form.get('terms_accepted') == 'on'
         
         print(f"📝 Tentativa de cadastro: {email} ({user_type})")
         
+        # Validações
+        if password != password_confirm:
+            messages.append('As senhas não coincidem')
+            return get_base_html("Cadastro - PhotoCap", get_register_content(), messages)
+        
+        if not terms_accepted:
+            messages.append('Você deve aceitar os termos de uso')
+            return get_base_html("Cadastro - PhotoCap", get_register_content(), messages)
+        
         if data_manager:
-            users_data = data_manager.get_users()
-            
-            # Verifica se o email já existe
-            for user in users_data.values():
-                if user['email'] == email:
-                    messages.append('Email já cadastrado')
-                    print(f"❌ Email já cadastrado: {email}")
-                    return get_base_html("Cadastro - PhotoCap", get_register_content(), messages)
-            
-            # Cria o novo usuário
-            user = {
-                'username': username,
-                'email': email,
-                'password': password,
-                'user_type': user_type,
-                'created_at': datetime.now()
-            }
-            
             try:
-                user_id = data_manager.add_user(user)
-                messages.append('Conta criada com sucesso!')
-                print(f"✅ Usuário criado com ID: {user_id}")
-                return redirect(url_for('login'))
+                # Cria o novo usuário com todos os dados
+                user_id = data_manager.create_user(
+                    username=email,  # Usa email como username
+                    password=password,
+                    email=email,
+                    user_type=user_type,
+                    full_name=full_name,
+                    cpf=clean_cpf(cpf),
+                    phone=phone
+                )
+                
+                if user_id:
+                    messages.append('Conta criada com sucesso!')
+                    print(f"✅ Usuário criado com ID: {user_id}, Tipo: {user_type}")
+                    return redirect(url_for('login'))
+                else:
+                    messages.append('Erro ao criar conta - usuário já existe')
+                    print(f"❌ Erro ao criar usuário - já existe")
             except Exception as e:
                 messages.append(f'Erro ao criar conta: {str(e)}')
                 print(f"❌ Erro ao criar usuário: {e}")
@@ -298,8 +337,68 @@ def register():
     
     return get_base_html("Cadastro - PhotoCap", get_register_content(), messages)
 
+@app.route('/register/photographer', methods=['GET', 'POST'])
+def register_photographer():
+    """Página de registro específica para fotógrafos"""
+    messages = []
+    
+    if request.method == 'POST':
+        # Coleta todos os dados do formulário
+        country = request.form.get('country', 'Brasil')
+        cpf_cnpj = request.form.get('cpf_cnpj', '')
+        full_name = request.form['full_name']
+        email = request.form['email']
+        phone = request.form['phone']
+        password = request.form['password']
+        password_confirm = request.form['password_confirm']
+        how_knew = request.form.get('how_knew', '')
+        terms_accepted = request.form.get('terms_accepted') == 'on'
+        
+        print(f"📸 Tentativa de cadastro de fotógrafo: {email}")
+        
+        # Validações
+        if password != password_confirm:
+            messages.append('As senhas não coincidem')
+            return get_base_html("Cadastro Fotógrafo - PhotoCap", get_register_photographer_content(), messages)
+        
+        if not terms_accepted:
+            messages.append('Você deve aceitar os termos de uso')
+            return get_base_html("Cadastro Fotógrafo - PhotoCap", get_register_photographer_content(), messages)
+        
+        if data_manager:
+            try:
+                # Cria o novo usuário fotógrafo com todos os dados
+                user_id = data_manager.create_user(
+                    username=email,  # Usa email como username
+                    password=password,
+                    email=email,
+                    user_type='photographer',  # Sempre fotógrafo
+                    full_name=full_name,
+                    cpf=clean_cpf(cpf_cnpj),
+                    phone=phone
+                )
+                
+                if user_id:
+                    messages.append('Conta de fotógrafo criada com sucesso!')
+                    print(f"✅ Fotógrafo criado com ID: {user_id}")
+                    return redirect(url_for('login'))
+                else:
+                    messages.append('Erro ao criar conta - usuário já existe')
+                    print(f"❌ Erro ao criar fotógrafo - já existe")
+            except Exception as e:
+                messages.append(f'Erro ao criar conta: {str(e)}')
+                print(f"❌ Erro ao criar fotógrafo: {e}")
+        else:
+            messages.append('Sistema de dados não disponível')
+            print("❌ Sistema de dados não disponível")
+    
+    return get_base_html("Cadastro Fotógrafo - PhotoCap", get_register_photographer_content(), messages)
+
+
+
 def get_register_content():
-    """Retorna o conteúdo HTML do formulário de registro"""
+    """Retorna o conteúdo HTML do formulário de registro único"""
+    
     return '''
     <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6">
@@ -309,87 +408,265 @@ def get_register_content():
                         <h2 class="fw-bold text-primary">
                             <i class="fas fa-camera"></i> PhotoCap
                         </h2>
-                        <p class="text-muted">Crie sua conta</p>
+                        <p class="text-muted">Ainda não possui cadastro? É fácil e rápido!</p>
                     </div>
                     
                     <form method="POST">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="username" class="form-label">Nome de usuário</label>
-                                    <input type="text" class="form-control" id="username" name="username" required>
+                                    <label for="full_name" class="form-label">NOME COMPLETO *</label>
+                                    <input type="text" class="form-control" id="full_name" name="full_name" required>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
-                                    <label for="email" class="form-label">Email</label>
-                                    <input type="email" class="form-control" id="email" name="email" required>
+                                    <label for="cpf" class="form-label">CPF (opcional)</label>
+                                    <input type="text" class="form-control" id="cpf" name="cpf" placeholder="000.000.000-00">
                                 </div>
                             </div>
                         </div>
                         
                         <div class="mb-3">
-                            <label for="password" class="form-label">Senha</label>
-                            <input type="password" class="form-control" id="password" name="password" required>
+                            <label for="phone" class="form-label">CELULAR *</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-flag"></i> +55
+                                </span>
+                                <input type="text" class="form-control" id="phone" name="phone" placeholder="(11) 99999-9999" required>
+                            </div>
                         </div>
                         
-                        <div class="mb-4">
-                            <label class="form-label">Tipo de conta</label>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="user_type" id="customer" value="customer" checked>
-                                        <label class="form-check-label" for="customer">
-                                            <i class="fas fa-user"></i> Cliente
-                                        </label>
-                                    </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">EMAIL *</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">SENHA *</label>
+                                    <input type="password" class="form-control" id="password" name="password" required>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="user_type" id="photographer" value="photographer">
-                                        <label class="form-check-label" for="photographer">
-                                            <i class="fas fa-camera"></i> Fotógrafo
-                                        </label>
-                                    </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="password_confirm" class="form-label">REPETIR SENHA *</label>
+                                    <input type="password" class="form-control" id="password_confirm" name="password_confirm" required>
                                 </div>
                             </div>
                         </div>
                         
+
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="on" id="terms_accepted" name="terms_accepted" required>
+                            <label class="form-check-label" for="terms_accepted">
+                                </i> Concordo e aceito os Termos de uso e Politica de privacidade
+                            </label>
+                        </div>
+                        
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-user-plus"></i> Criar Conta
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-user-plus"></i> Efetuar cadastro
                             </button>
                         </div>
                     </form>
                     
-                    <hr class="my-4">
-                    
-                    <div class="text-center">
-                        <p class="mb-0">Já tem uma conta?</p>
-                        <a href="/login" class="btn btn-outline-primary">Fazer Login</a>
-                    </div>
+
                 </div>
             </div>
         </div>
     </div>
     '''
 
-@app.route('/dashboard')
-def dashboard():
-    """Dashboard do usuário"""
+def get_register_photographer_content():
+    """Retorna o conteúdo HTML do formulário de registro para fotógrafos"""
+    
+    return '''
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow">
+                <div class="card-body p-5">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2 class="fw-bold text-primary mb-0">
+                            <i class="fas fa-camera"></i> Crie sua conta na PhotoCap
+                        </h2>
+                        <a href="/login" class="btn btn-link text-decoration-none">
+                            Já é cadastrado? Efetuar login
+                        </a>
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="country" class="form-label">Selecione seu país</label>
+                            <select class="form-select" id="country" name="country">
+                                <option value="Brasil" selected>Brasil</option>
+                                <option value="Argentina">Argentina</option>
+                                <option value="Chile">Chile</option>
+                                <option value="Colômbia">Colômbia</option>
+                                <option value="México">México</option>
+                                <option value="Peru">Peru</option>
+                                <option value="Uruguai">Uruguai</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="cpf_cnpj" class="form-label">Digite seu CPF ou CNPJ</label>
+                            <input type="text" class="form-control" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="full_name" class="form-label">Digite seu nome</label>
+                            <input type="text" class="form-control" id="full_name" name="full_name" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Digite seu email</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Digite seu número de celular</label>
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-flag"></i> +55
+                                </span>
+                                <input type="text" class="form-control" id="phone" name="phone" placeholder="(11) 99999-9999" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Crie sua senha</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="password" name="password" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password_confirm" class="form-label">Confirme sua senha</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="password_confirm" name="password_confirm" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password_confirm')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="how_knew" class="form-label">Como conheceu o PhotoCap?</label>
+                            <select class="form-select" id="how_knew" name="how_knew">
+                                <option value="">Selecione uma opção</option>
+                                <option value="google">Google</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="instagram">Instagram</option>
+                                <option value="indicacao">Indicação de amigo</option>
+                                <option value="evento">Evento</option>
+                                <option value="outro">Outro</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="on" id="terms_accepted" name="terms_accepted" required>
+                            <label class="form-check-label" for="terms_accepted">
+                                Ao criar uma conta, você concorda com os Termos e Condições de uso
+                            </label>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                            <small class="text-muted">reCAPTCHA Privacidade - Termos</small>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="fas fa-user-plus"></i> Criar conta
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    function togglePassword(fieldId) {
+        const field = document.getElementById(fieldId);
+        const icon = field.nextElementSibling.querySelector('i');
+        
+        if (field.type === 'password') {
+            field.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            field.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+    </script>
+    '''
+
+
+@app.route('/area_fotografo')
+def area_fotografo():
+    """Área do usuário"""
+    print(f"🔍 Área do Fotógrafo acessado - session: {session}")
+    print(f"🔍 Session permanent: {session.permanent}")
+    print(f"🔍 Session modified: {session.modified}")
+    
     user_id = session.get('user_id')
-    if not user_id or not data_manager:
+    username = session.get('username')
+    email = session.get('email')
+    user_type = session.get('user_type', 'customer')
+    
+    print(f"🔍 User ID da sessão: {user_id}")
+    print(f"🔍 Username da sessão: {username}")
+    print(f"🔍 User Type da sessão: {user_type}")
+    print(f"🔍 Data manager disponível: {data_manager is not None}")
+    
+    if not user_id:
+        print("❌ Nenhum user_id na sessão - redirecionando para login")
         return redirect(url_for('login'))
     
-    users_data = data_manager.get_users()
-    if user_id not in users_data:
+    if not data_manager:
+        print("❌ Data manager não disponível - redirecionando para login")
         return redirect(url_for('login'))
     
-    user = users_data[user_id]
+    # Se temos username na sessão, usamos ele diretamente
+    if username:
+        print(f"✅ Usando username da sessão: {username}")
+        user = {
+            'UserId': user_id,
+            'Username': username,
+            'Email': email,
+            'UserType': user_type
+        }
+    else:
+        # Busca no banco como fallback
+        users_data = data_manager.get_users()
+        print(f"🔍 Total de usuários no banco: {len(users_data)}")
+        
+        user = None
+        for u in users_data:
+            if u['UserId'] == user_id:
+                user = u
+                break
+        
+        if not user:
+            print(f"❌ Usuário com ID {user_id} não encontrado no banco - redirecionando para login")
+            return redirect(url_for('login'))
     
-    if user['user_type'] == 'photographer':
+    print(f"✅ Usuário encontrado: {user['Username']} (Tipo: {user['UserType']})")
+    
+    # Verifica se é fotógrafo ou cliente
+    if user['UserType'] == 'photographer':
+        # Conteúdo para fotógrafos
         events_data = data_manager.get_events()
-        user_events = [e for e in events_data.values() if e['photographer_id'] == user_id]
+        user_events = events_data
         
         events_html = ""
         for event in user_events:
@@ -397,21 +674,25 @@ def dashboard():
             <div class="col-md-6 col-lg-4 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
-                        <h6 class="card-title">{event['name']}</h6>
+                        <h6 class="card-title">{event['Name']}</h6>
                         <p class="card-text text-muted">
                             <small>
-                                <i class="fas fa-calendar"></i> {format_date(event['date'])}<br>
-                                <i class="fas fa-map-marker-alt"></i> {event.get('location', 'Local não informado')}
+                                <i class="fas fa-calendar"></i> {format_date(event['Date'])}<br>
+                                <i class="fas fa-map-marker-alt"></i> Local não informado
                             </small>
                         </p>
-                        <a href="/event/{event['id']}" class="btn btn-outline-primary btn-sm">Ver Evento</a>
+                        <a href="/event/{event['EventId']}" class="btn btn-outline-primary btn-sm">Ver Evento</a>
                     </div>
                 </div>
             </div>
             '''
         
         content = f'''
-        <h1 class="mb-4"><i class="fas fa-camera"></i> Dashboard do Fotógrafo</h1>
+        <h1 class="mb-4"><i class="fas fa-camera"></i> Área do Fotógrafo</h1>
+        
+        <div class="alert alert-info">
+            <i class="fas fa-user"></i> Bem-vindo, <strong>{user['Username']}</strong>!
+        </div>
         
         <div class="row mb-4">
             <div class="col-md-4">
@@ -425,46 +706,120 @@ def dashboard():
                 </a>
             </div>
             <div class="col-md-4">
-                <a href="/register_face" class="btn btn-info btn-lg w-100 mb-3">
-                    <i class="fas fa-user-plus"></i> Registrar Face
+                <a href="/search" class="btn btn-info btn-lg w-100 mb-3">
+                    <i class="fas fa-search"></i> Buscar Fotos
                 </a>
             </div>
         </div>
         
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-calendar"></i> Meus Eventos</h5>
+                <h5 class="mb-0"><i class="fas fa-calendar"></i> Eventos Disponíveis</h5>
             </div>
             <div class="card-body">
                 <div class="row">
-                    {events_html if events_html else '<div class="col-12 text-center"><p>Nenhum evento criado ainda.</p><a href="/create_event" class="btn btn-primary">Criar Primeiro Evento</a></div>'}
+                    {events_html if events_html else '<div class="col-12 text-center"><p>Nenhum evento disponível ainda.</p><a href="/create_event" class="btn btn-primary">Criar Primeiro Evento</a></div>'}
                 </div>
             </div>
         </div>
         '''
     else:
+        # Conteúdo para clientes
         content = f'''
         <h1 class="mb-4"><i class="fas fa-user"></i> Minha Conta</h1>
-        <p>Bem-vindo, {user['username']}!</p>
-        <a href="/search" class="btn btn-primary">Buscar Fotos</a>
+        
+        <div class="alert alert-success">
+            <i class="fas fa-user"></i> Bem-vindo, <strong>{user['Username']}</strong>!
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <a href="/search" class="btn btn-primary btn-lg w-100 mb-3">
+                    <i class="fas fa-search"></i> Buscar Fotos
+                </a>
+            </div>
+            <div class="col-md-6">
+                <a href="/face_search" class="btn btn-warning btn-lg w-100 mb-3">
+                    <i class="fas fa-user-search"></i> Busca por Face
+                </a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> Como Funciona</h5>
+            </div>
+            <div class="card-body">
+                <p>Como cliente, você pode:</p>
+                <ul>
+                    <li><i class="fas fa-search text-primary"></i> <strong>Buscar fotos</strong> por nome do evento</li>
+                    <li><i class="fas fa-user-search text-warning"></i> <strong>Buscar por reconhecimento facial</strong> enviando uma foto do rosto</li>
+                    <li><i class="fas fa-download text-success"></i> <strong>Visualizar e baixar</strong> fotos dos eventos</li>
+                </ul>
+                <p class="text-muted mt-3">
+                    <i class="fas fa-info-circle"></i> 
+                    Para criar eventos e enviar fotos, você precisa de uma conta de fotógrafo. 
+                    Entre em contato conosco para mais informações.
+                </p>
+            </div>
+        </div>
         '''
     
-    return get_base_html("Dashboard - PhotoCap", content)
+    return get_base_html("Área do Fotógrafo - PhotoCap", content)
 
 @app.route('/create_event', methods=['GET', 'POST'])
 def create_event():
     """Criar novo evento"""
+    print(f"🔍 Create Event acessado - session: {session}")
+    
     user_id = session.get('user_id')
-    if not user_id or not data_manager:
+    username = session.get('username')
+    email = session.get('email')
+    
+    print(f"🔍 User ID da sessão: {user_id}")
+    print(f"🔍 Username da sessão: {username}")
+    print(f"🔍 Data manager disponível: {data_manager is not None}")
+    
+    if not user_id:
+        print("❌ Nenhum user_id na sessão - redirecionando para login")
         return redirect(url_for('login'))
     
-    users_data = data_manager.get_users()
-    if user_id not in users_data:
+    if not data_manager:
+        print("❌ Data manager não disponível - redirecionando para login")
         return redirect(url_for('login'))
     
-    user = users_data[user_id]
-    if user['user_type'] != 'photographer':
-        return redirect(url_for('dashboard'))
+    # Se temos username na sessão, usamos ele diretamente
+    if username:
+        print(f"✅ Usando username da sessão: {username}")
+        user = {
+            'UserId': user_id,
+            'Username': username,
+            'Email': email
+        }
+    else:
+        # Busca no banco como fallback
+        users_data = data_manager.get_users()
+        print(f"🔍 Total de usuários no banco: {len(users_data)}")
+        
+        user = None
+        for u in users_data:
+            if u['UserId'] == user_id:
+                user = u
+                break
+        
+        if not user:
+            print(f"❌ Usuário com ID {user_id} não encontrado no banco - redirecionando para login")
+            return redirect(url_for('login'))
+    
+    print(f"✅ Usuário encontrado: {user['Username']}")
+    
+    # Verifica se o usuário é fotógrafo
+    if user['UserType'] != 'photographer':
+        print(f"❌ Usuário {user['Username']} não tem permissão para criar eventos (Tipo: {user['UserType']})")
+        messages.append('Apenas fotógrafos podem criar eventos.')
+        return redirect(url_for('area_fotografo'))
+    
+    print(f"✅ Usuário {user['Username']} tem permissão para criar eventos")
     
     messages = []
     
@@ -483,19 +838,14 @@ def create_event():
         
         event = {
             'name': name,
-            'description': description,
-            'date': date,
-            'location': location,
-            'category': category,
-            'photographer_id': user_id,
-            'created_at': datetime.now()
+            'date': date_str
         }
         
         try:
             event_id = data_manager.add_event(event)
             messages.append('Evento criado com sucesso!')
             print(f"✅ Evento criado com ID: {event_id}")
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('area_fotografo'))
         except Exception as e:
             messages.append(f'Erro ao criar evento: {str(e)}')
             print(f"❌ Erro ao criar evento: {e}")
@@ -557,7 +907,7 @@ def get_create_event_content():
                         </div>
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="/dashboard" class="btn btn-outline-secondary me-md-2">Cancelar</a>
+                            <a href="/area_fotografo" class="btn btn-outline-secondary me-md-2">Cancelar</a>
                             <button type="submit" class="btn btn-primary">Criar Evento</button>
                         </div>
                     </form>
@@ -570,17 +920,56 @@ def get_create_event_content():
 @app.route('/upload_photos', methods=['GET', 'POST'])
 def upload_photos():
     """Upload de fotos para fotógrafos"""
+    print(f"🔍 Upload Photos acessado - session: {session}")
+    
     user_id = session.get('user_id')
-    if not user_id or not data_manager:
+    username = session.get('username')
+    email = session.get('email')
+    
+    print(f"🔍 User ID da sessão: {user_id}")
+    print(f"🔍 Username da sessão: {username}")
+    print(f"🔍 Data manager disponível: {data_manager is not None}")
+    
+    if not user_id:
+        print("❌ Nenhum user_id na sessão - redirecionando para login")
         return redirect(url_for('login'))
     
-    users_data = data_manager.get_users()
-    if user_id not in users_data:
+    if not data_manager:
+        print("❌ Data manager não disponível - redirecionando para login")
         return redirect(url_for('login'))
     
-    user = users_data[user_id]
-    if user['user_type'] != 'photographer':
-        return redirect(url_for('dashboard'))
+    # Se temos username na sessão, usamos ele diretamente
+    if username:
+        print(f"✅ Usando username da sessão: {username}")
+        user = {
+            'UserId': user_id,
+            'Username': username,
+            'Email': email
+        }
+    else:
+        # Busca no banco como fallback
+        users_data = data_manager.get_users()
+        print(f"🔍 Total de usuários no banco: {len(users_data)}")
+        
+        user = None
+        for u in users_data:
+            if u['UserId'] == user_id:
+                user = u
+                break
+        
+        if not user:
+            print(f"❌ Usuário com ID {user_id} não encontrado no banco - redirecionando para login")
+            return redirect(url_for('login'))
+    
+    print(f"✅ Usuário encontrado: {user['Username']}")
+    
+    # Verifica se o usuário é fotógrafo
+    if user['UserType'] != 'photographer':
+        print(f"❌ Usuário {user['Username']} não tem permissão para enviar fotos (Tipo: {user['UserType']})")
+        messages.append('Apenas fotógrafos podem enviar fotos.')
+        return redirect(url_for('area_fotografo'))
+    
+    print(f"✅ Usuário {user['Username']} tem permissão para enviar fotos")
     
     messages = []
     
@@ -591,7 +980,9 @@ def upload_photos():
             
             print(f"📤 Upload iniciado: {len(files)} arquivos para evento {event_id}")
             
-            if event_id not in data_manager.get_events():
+            events_data = data_manager.get_events()
+            event_exists = any(e['EventId'] == event_id for e in events_data)
+            if not event_exists:
                 messages.append('Evento não encontrado')
                 return get_base_html("Enviar Fotos - PhotoCap", get_upload_photos_content(), messages)
             
@@ -616,12 +1007,9 @@ def upload_photos():
                         
                         # Cria registro da foto
                         photo = {
-                            'filename': new_filename,
-                            'original_filename': filename,
                             'event_id': event_id,
-                            'photographer_id': user_id,
-                            'price': 0.0,
-                            'created_at': datetime.now()
+                            'filename': new_filename,
+                            'image_data': None
                         }
                         
                         photo_id = data_manager.add_photo(photo)
@@ -641,7 +1029,7 @@ def upload_photos():
                 messages.append('Nenhuma foto foi processada com sucesso')
                 print("❌ Upload falhou: nenhuma foto processada")
             
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('area_fotografo'))
             
         except Exception as e:
             print(f"❌ Erro no upload: {e}")
@@ -661,12 +1049,12 @@ def get_upload_photos_content():
         '''
     
     events_data = data_manager.get_events()
-    user_id = session.get('user_id')
-    user_events = [e for e in events_data.values() if e['photographer_id'] == user_id]
+    # Mostra todos os eventos disponíveis
+    user_events = events_data
     
     events_options = ""
     for event in user_events:
-        events_options += f'<option value="{event["id"]}">{event["name"]} - {format_date(event["date"])}</option>'
+        events_options += f'<option value="{event["EventId"]}">{event["Name"]} - {format_date(event["Date"])}</option>'
     
     return f'''
     <div class="row justify-content-center">
@@ -701,14 +1089,14 @@ def get_upload_photos_content():
                         </div>
                         
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="/dashboard" class="btn btn-outline-secondary me-md-2">Cancelar</a>
+                            <a href="/area_fotografo" class="btn btn-outline-secondary me-md-2">Cancelar</a>
                             <button type="submit" class="btn btn-success">Enviar Fotos</button>
                         </div>
                     </form>
                     ''' if user_events else '''
                     <div class="text-center py-4">
                         <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
-                        <h5>Nenhum evento criado</h5>
+                        <h5>Nenhum evento disponível</h5>
                         <p class="text-muted">Você precisa criar um evento antes de enviar fotos.</p>
                         <a href="/create_event" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Criar Evento
@@ -732,11 +1120,11 @@ def search():
         if event_name:
             # Filtra eventos pelo nome
             filtered_events = []
-            for event in events_data.values():
-                if event_name.lower() in event['name'].lower():
+            for event in events_data:
+                if event_name.lower() in event['Name'].lower():
                     filtered_events.append(event)
         else:
-            filtered_events = list(events_data.values())
+            filtered_events = events_data
     else:
         filtered_events = []
     
@@ -746,13 +1134,13 @@ def search():
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card h-100">
                 <div class="card-body">
-                    <h5 class="card-title">{event['name']}</h5>
+                    <h5 class="card-title">{event['Name']}</h5>
                     <p class="card-text">
-                        <i class="fas fa-calendar"></i> {format_date(event['date'])}<br>
-                        <i class="fas fa-map-marker-alt"></i> {event.get('location', 'Local não informado')}<br>
-                        <i class="fas fa-tag"></i> {event.get('category', 'Não categorizado')}
+                        <i class="fas fa-calendar"></i> {format_date(event['Date'])}<br>
+                        <i class="fas fa-map-marker-alt"></i> Local não informado<br>
+                        <i class="fas fa-tag"></i> Não categorizado
                     </p>
-                    <a href="/event/{event['id']}" class="btn btn-primary">Ver Fotos</a>
+                    <a href="/event/{event['EventId']}" class="btn btn-primary">Ver Fotos</a>
                 </div>
             </div>
         </div>
@@ -801,23 +1189,20 @@ def event_details(event_id):
         return redirect(url_for('index'))
     
     events_data = data_manager.get_events()
-    if event_id not in events_data:
+    event = None
+    for e in events_data:
+        if e['EventId'] == event_id:
+            event = e
+            break
+    
+    if not event:
         return redirect(url_for('index'))
     
-    event = events_data[event_id]
     photos_data = data_manager.get_photos()
-    event_photos = [p for p in photos_data.values() if p['event_id'] == event_id]
+    event_photos = [p for p in photos_data if p['EventId'] == event_id]
     
-    # Agrupa fotos por fotógrafo
-    users_data = data_manager.get_users()
-    photos_by_photographer = {}
-    for photo in event_photos:
-        photographer_id = photo['photographer_id']
-        if photographer_id in users_data:
-            photographer_name = users_data[photographer_id]['username']
-            if photographer_name not in photos_by_photographer:
-                photos_by_photographer[photographer_name] = []
-            photos_by_photographer[photographer_name].append(photo)
+    # Agrupa fotos por fotógrafo (simplificado por enquanto)
+    photos_by_photographer = {'Fotógrafo': event_photos}
     
     photos_html = ""
     for photographer_name, photos in photos_by_photographer.items():
@@ -834,14 +1219,14 @@ def event_details(event_id):
             photos_html += f'''
             <div class="col-md-4 col-lg-3 mb-3">
                 <div class="card h-100">
-                    <img src="/uploads/{photo['filename']}" class="card-img-top" alt="Foto" style="height: 200px; object-fit: cover;">
+                    <img src="/uploads/{photo['Filename']}" class="card-img-top" alt="Foto" style="height: 200px; object-fit: cover;">
                     <div class="card-body">
                         <p class="card-text">
                             <small class="text-muted">
-                                <i class="fas fa-calendar"></i> {format_date(photo['created_at'])}
+                                <i class="fas fa-calendar"></i> {format_date(photo['UploadDate'])}
                             </small>
                         </p>
-                        <a href="/uploads/{photo['filename']}" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <a href="/uploads/{photo['Filename']}" target="_blank" class="btn btn-outline-primary btn-sm">
                             <i class="fas fa-eye"></i> Ver
                         </a>
                     </div>
@@ -861,23 +1246,23 @@ def event_details(event_id):
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="/">Início</a></li>
-                    <li class="breadcrumb-item active">{event['name']}</li>
+                    <li class="breadcrumb-item active">{event['Name']}</li>
                 </ol>
             </nav>
             
             <div class="card mb-4">
                 <div class="card-body">
-                    <h1 class="card-title">{event['name']}</h1>
-                    <p class="card-text">{event.get('description', 'Sem descrição')}</p>
+                    <h1 class="card-title">{event['Name']}</h1>
+                    <p class="card-text">Sem descrição</p>
                     <div class="row">
                         <div class="col-md-6">
-                            <p><i class="fas fa-calendar"></i> <strong>Data:</strong> {format_date(event['date'])}</p>
+                            <p><i class="fas fa-calendar"></i> <strong>Data:</strong> {format_date(event['Date'])}</p>
                         </div>
                         <div class="col-md-6">
-                            <p><i class="fas fa-map-marker-alt"></i> <strong>Local:</strong> {event.get('location', 'Local não informado')}</p>
+                            <p><i class="fas fa-map-marker-alt"></i> <strong>Local:</strong> Local não informado</p>
                         </div>
                     </div>
-                    <p><i class="fas fa-tag"></i> <strong>Categoria:</strong> {event.get('category', 'Não categorizado')}</p>
+                    <p><i class="fas fa-tag"></i> <strong>Categoria:</strong> Não categorizado</p>
                 </div>
             </div>
             
@@ -892,7 +1277,7 @@ def event_details(event_id):
     </div>
     '''
     
-    return get_base_html(f"{event['name']} - PhotoCap", content)
+    return get_base_html(f"{event['Name']} - PhotoCap", content)
 
 @app.route('/face_search', methods=['GET', 'POST'])
 def face_search():
@@ -1078,7 +1463,14 @@ def get_face_search_content():
 @app.route('/logout')
 def logout():
     """Logout do usuário"""
-    session.pop('user_id', None)
+    print(f"🔍 Logout solicitado - session antes: {session}")
+    
+    # Limpa toda a sessão
+    session.clear()
+    
+    print(f"✅ Sessão limpa - session depois: {session}")
+    print("✅ Logout realizado com sucesso")
+    
     return redirect(url_for('index'))
 
 @app.route('/uploads/<filename>')
