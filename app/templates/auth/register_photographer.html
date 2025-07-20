@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro Fotógrafo - PhotoCap{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card border-0 shadow">
+            <div class="card-body p-5">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2 class="fw-bold text-primary mb-0">
+                        <i class="fas fa-camera"></i> Crie sua conta na PhotoCap
+                    </h2>
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-link text-decoration-none">
+                        Já é cadastrado? Efetuar login
+                    </a>
+                </div>
+                
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="country" class="form-label">Selecione seu país</label>
+                        <select class="form-select" id="country" name="country">
+                            <option value="Brasil" selected>Brasil</option>
+                            <option value="Argentina">Argentina</option>
+                            <option value="Chile">Chile</option>
+                            <option value="Colômbia">Colômbia</option>
+                            <option value="México">México</option>
+                            <option value="Peru">Peru</option>
+                            <option value="Uruguai">Uruguai</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="cpf_cnpj" class="form-label">Digite seu CPF ou CNPJ</label>
+                        <input type="text" class="form-control" id="cpf_cnpj" name="cpf_cnpj" placeholder="000.000.000-00 ou 00.000.000/0000-00">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="full_name" class="form-label">Digite seu nome</label>
+                        <input type="text" class="form-control" id="full_name" name="full_name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Digite seu email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">Digite seu número de celular</label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-flag"></i> +55
+                            </span>
+                            <input type="text" class="form-control" id="phone" name="phone" placeholder="(11) 99999-9999" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Crie sua senha</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password" name="password" required>
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="password_confirm" class="form-label">Confirme sua senha</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="password_confirm" name="password_confirm" required>
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('password_confirm')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="how_knew" class="form-label">Como conheceu o PhotoCap?</label>
+                        <select class="form-select" id="how_knew" name="how_knew">
+                            <option value="">Selecione uma opção</option>
+                            <option value="google">Google</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="instagram">Instagram</option>
+                            <option value="indicacao">Indicação de amigo</option>
+                            <option value="evento">Evento</option>
+                            <option value="outro">Outro</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" value="on" id="terms_accepted" name="terms_accepted" required>
+                        <label class="form-check-label" for="terms_accepted">
+                            Ao criar uma conta, você concorda com os Termos e Condições de uso
+                        </label>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="g-recaptcha" data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"></div>
+                        <small class="text-muted">reCAPTCHA Privacidade - Termos</small>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-warning btn-lg">
+                            <i class="fas fa-user-plus"></i> Criar conta
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    const icon = field.nextElementSibling.querySelector('i');
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        field.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+</script>
+{% endblock %} 

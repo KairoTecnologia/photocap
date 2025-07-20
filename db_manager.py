@@ -40,9 +40,10 @@ class DatabaseManager:
         try:
             with pyodbc.connect(self.connection_string) as conn:
                 print("✅ Conexão com SQL Server estabelecida com sucesso!")
+                return True
         except Exception as e:
             print(f"❌ Erro ao conectar com SQL Server: {e}")
-            raise
+            return False
     
     def get_connection(self):
         """Retorna uma conexão com o banco de dados"""

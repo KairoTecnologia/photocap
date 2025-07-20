@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.Name }} - PhotoCap{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('search.index') }}">Buscar</a></li>
+                <li class="breadcrumb-item active">{{ event.Name }}</li>
+            </ol>
+        </nav>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <h1 class="card-title">{{ event.Name }}</h1>
+                <p class="card-text">
+                    <i class="fas fa-calendar"></i> <strong>Data:</strong> {{ format_date(event.Date) }}<br>
+                    <i class="fas fa-map-marker-alt"></i> <strong>Local:</strong> Local não informado<br>
+                    <i class="fas fa-images"></i> <strong>Fotos:</strong> {{ photos|length }} foto(s)
+                </p>
+            </div>
+        </div>
+        
+        {% if photos %}
+        <div class="row">
+            {% for photo in photos %}
+            <div class="col-md-4 col-lg-3 mb-4">
+                <div class="card">
+                    <img src="https://via.placeholder.com/300x200/ff6b35/ffffff?text=Foto+{{ photo.PhotoId }}" 
+                         class="card-img-top" alt="Foto {{ photo.PhotoId }}">
+                    <div class="card-body">
+                        <p class="card-text text-muted">
+                            <small>{{ photo.Filename }}</small>
+                        </p>
+                        <a href="#" class="btn btn-primary btn-sm">Ver Original</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center">
+            <p>Nenhuma foto disponível para este evento ainda.</p>
+            <p class="text-muted">As fotos serão adicionadas pelo fotógrafo em breve.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

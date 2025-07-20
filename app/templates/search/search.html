@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Buscar Eventos - PhotoCap{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-6">
+        <h1 class="display-4 fw-bold mb-4">
+            Encontre suas fotos!<br>
+            <span class="text-warning">Busque por evento</span>
+        </h1>
+        <p class="lead mb-4">
+            Digite o nome do evento para encontrar suas fotos.
+        </p>
+        <form method="GET" class="mb-4">
+            <div class="input-group">
+                <input type="text" name="event_name" class="form-control" placeholder="Digite o nome do evento..." value="{{ event_name }}">
+                <button class="btn btn-warning" type="submit">
+                    <i class="fas fa-search"></i> Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+    <div class="col-lg-6 text-center">
+        <img src="https://via.placeholder.com/500x400/ff6b35/ffffff?text=Busca" class="img-fluid rounded">
+    </div>
+</div>
+
+{% if event_name %}
+<div class="row mt-5">
+    <div class="col-12">
+        <h2 class="text-center mb-4">Resultados para "{{ event_name }}"</h2>
+        <div class="row">
+            {% if events %}
+                {% for event in events %}
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ event.Name }}</h5>
+                            <p class="card-text">
+                                <i class="fas fa-calendar"></i> {{ format_date(event.Date) }}<br>
+                                <i class="fas fa-map-marker-alt"></i> Local não informado
+                            </p>
+                            <a href="{{ url_for('search.event_details', event_id=event.EventId) }}" class="btn btn-primary">Ver Fotos</a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12 text-center">
+                    <p>Nenhum evento encontrado com esse nome.</p>
+                    <p class="text-muted">Tente usar termos diferentes ou verificar a ortografia.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %} 

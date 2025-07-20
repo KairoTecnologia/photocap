@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Enviar Fotos - PhotoCap{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card border-0 shadow">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold text-primary">
+                        <i class="fas fa-upload"></i> Enviar Fotos
+                    </h2>
+                    <p class="text-muted">Selecione o evento e as fotos para enviar</p>
+                </div>
+                
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="event_id" class="form-label">Selecionar Evento *</label>
+                        <select class="form-select" id="event_id" name="event_id" required>
+                            <option value="">Escolha um evento...</option>
+                            {% for event in events %}
+                            <option value="{{ event.EventId }}">{{ event.Name }} - {{ event.Date }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="photos" class="form-label">Selecionar Fotos *</label>
+                        <input type="file" class="form-control" id="photos" name="photos" multiple accept="image/*" required>
+                        <div class="form-text">Você pode selecionar múltiplas fotos. Formatos aceitos: JPG, PNG, GIF</div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('dashboard.area_fotografo') }}" class="btn btn-outline-secondary me-md-2">Cancelar</a>
+                        <button type="submit" class="btn btn-success">Enviar Fotos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
